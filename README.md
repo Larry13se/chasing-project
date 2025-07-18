@@ -1,13 +1,5 @@
-# Two-Server Medicare Automation System
-
-This system has been separated into two distinct servers for better organization and reliability:
-
-1. **Medicare Automation Server** - Handles account creation and doctor fetching
-2. **Form Submission Server** - Handles form submissions after Medicare automation is complete
-
-## Architecture Overview
-# ChasingProject - ICO ENGINE
-**Comprehensive Documentation**
+ # ChasingProject - ICO ENGINE  
+**Comprehensive Technical Documentation**
 
 ---
 
@@ -16,30 +8,24 @@ This system has been separated into two distinct servers for better organization
 1. [Project Overview](#project-overview)
 2. [Architecture Diagram](#architecture-diagram)
 3. [Component Breakdown](#component-breakdown)
-    - Orchestration Server
-    - Medicare Automation Server
-    - Doctor Fetching Server
-    - Form Submission Server
-    - Google Sheets Integration
 4. [Environment Setup](#environment-setup)
-    - Prerequisites
-    - Directory Structure
-    - Environment Variables
 5. [How to Run](#how-to-run)
 6. [Google Sheets Configuration](#google-sheets-configuration)
 7. [Server Endpoints](#server-endpoints)
 8. [Port Management](#port-management)
-9. [Common Workflows](#common-workflows)
-10. [Troubleshooting](#troubleshooting)
-11. [Security Notes](#security-notes)
-12. [Extending the System](#extending-the-system)
-13. [FAQ](#faq)
+9. [Orchestration Flow (Full)](#orchestration-flow-full)
+10. [Doctor Fetching Flow (Full)](#doctor-fetching-flow-full)
+11. [Common Workflows](#common-workflows)
+12. [Troubleshooting](#troubleshooting)
+13. [Security Notes](#security-notes)
+14. [Extending the System](#extending-the-system)
+15. [FAQ](#faq)
 
 ---
 
 ## 1. Project Overview
 
-This project automates the process of Medicare account creation, doctor validation, and form submission, orchestrated via a central gateway and integrated with Google Sheets for data input/output. It is designed for high concurrency, robust error handling, and modular extensibility.
+This project automates Medicare account creation, doctor validation, and form submission, orchestrated via a central gateway and integrated with Google Sheets for data input/output. It is designed for high concurrency, robust error handling, and modular extensibility.
 
 ---
 
@@ -61,7 +47,7 @@ graph TD
 ## 3. Component Breakdown
 
 ### Orchestration Server (`orchestration-server.js`)
-- **Role:** Central gateway, manages workflow, proxies requests to other servers.
+- **Role:** Central gateway, manages workflow, proxies requests to other servers, manages the queue, and coordinates the full automation process.
 - **Endpoints:** `/health`, `/queue/add-lead`, `/queue/status`, `/medicare-proxy/*`, `/doctor-proxy/*`, `/form-proxy/*`
 - **Config:** Reads server URLs and port from `.env`.
 
@@ -244,7 +230,77 @@ FORM_SERVER_PORT=6003
 
 ---
 
-## 9. Common Workflows
+## 9. Orchestration Flow (Full)
+
+### **Trigger**
+- A change in Google Sheets (via Apps Script) triggers a webhook to the Orchestration Server (via ngrok/public URL).
+
+### **Queue Management**
+- The Orchestration Server receives the request at `/queue/add-lead`.
+- It validates the payload (rowIndex, sheetName, lastName, etc.).
+- It checks eligibility data (Part A/B) using Google Sheets API.
+- If eligible, it adds the lead to the processing queue.
+
+### **Workflow Execution**
+- The Orchestration Server processes the queue sequentially or in parallel (configurable).
+- For each lead:
+  1. **Medicare Account Creation:**  
+     - Calls the Medicare Server (`/process-medicare`) with patient data.
+     - Waits for completion and updates status in Google Sheets.
+  2. **Doctor Fetching:**  
+     - Calls the Doctor Fetching Server (`/fetch-doctors`) with patient credentials.
+     - Waits for doctor validation and updates Google Sheets with results.
+  3. **Form Submission:**  
+     - Calls the Form Submission Server (`/submit-form`) with all gathered data.
+     - Waits for confirmation and updates Google Sheets with final status.
+
+### **Error Handling**
+- If any step fails, the orchestration server logs the error, updates the sheet, and continues with the next lead.
+
+### **Endpoints Used**
+- `/queue/add-lead` (POST)
+- `/process-medicare` (POST to Medicare Server)
+- `/fetch-doctors` (POST to Doctor Server)
+- `/submit-form` (POST to Form Server)
+- `/health`, `/queue/status` for monitoring
+
+---
+
+## 10. Doctor Fetching Flow (Full)
+
+### **Trigger**
+- Orchestration server calls `/fetch-doctors` on the Doctor Fetching Server with patient credentials and row info.
+
+### **Data Extraction**
+- The Doctor Fetching Server:
+  - Reads credentials and patient info from Google Sheets.
+  - Extracts address, state, and zip code using the dual-path logic:
+    - **Zip:** From column Y, else from address string.
+    - **State:** From column X, else from address string.
+
+### **Doctor Validation**
+- The server uses browser automation (e.g., Playwright/Puppeteer) to:
+  - Log in to Medicare.gov with the patient’s credentials.
+  - Navigate to the doctor search/validation section.
+  - Fetch and validate doctor information (name, NPI, specialty, etc.).
+  - Exclude "bad" specialties as defined in a separate Google Sheet tab.
+
+### **Result Formatting**
+- Formats doctor data for Google Sheets (columns BN-BV, etc.).
+- Updates the Google Sheet with:
+  - Doctor info (up to 9 doctors)
+  - Status columns (Lead Status, Feedback, etc.)
+
+### **Error Handling**
+- If login fails, or no doctors are found, updates the sheet with error status and logs the issue.
+
+### **Endpoints Used**
+- `/fetch-doctors` (POST)
+- `/health` for monitoring
+
+---
+
+## 11. Common Workflows
 
 ### **A. New Patient Automation**
 1. User edits Google Sheet.
@@ -260,7 +316,7 @@ FORM_SERVER_PORT=6003
 
 ---
 
-## 10. Troubleshooting
+## 12. Troubleshooting
 
 ### **Port Already in Use**
 - Error: `EADDRINUSE`
@@ -281,7 +337,7 @@ FORM_SERVER_PORT=6003
 
 ---
 
-## 11. Security Notes
+## 13. Security Notes
 
 - **Do not commit `.env` files** with real credentials to version control.
 - **Google credentials** should be kept secret.
@@ -290,7 +346,7 @@ FORM_SERVER_PORT=6003
 
 ---
 
-## 12. Extending the System
+## 14. Extending the System
 
 - **Add new endpoints** by editing the relevant server file.
 - **Add new Google Sheet columns** and update extraction logic in `google-sheets-service.js`.
@@ -298,7 +354,7 @@ FORM_SERVER_PORT=6003
 
 ---
 
-## 13. FAQ
+## 15. FAQ
 
 **Q: How do I change the Google Sheet?**  
 A: Update the `GOOGLE_SHEET_ID` in your `.env` and restart the servers.
@@ -315,206 +371,4 @@ A: Stop all servers, kill any lingering processes, clear `.env` files if needed,
 ---
 
 ## **End of Documentation**
-
-If you need a PDF, markdown, or a more detailed breakdown of any section, let me know! 
-```
-Google Sheets → Medicare Automation Server → Form Submission Server
-```
-
-### Flow:
-1. When conditions are met in Google Sheets (Status and Quality Check), Medicare Automation Server is triggered first
-2. Medicare Server creates accounts, fetches doctors, and saves results to the sheet
-3. After Medicare automation is complete, Form Submission Server is triggered to submit the form
-4. Final submission status is updated in the sheet
-
-## Setup Instructions
-
-### 1. Medicare Automation Server
-
-Navigate to the MedicareAutomation directory:
-```bash
-cd MedicareAutomation
-npm install
-```
-
-Start the Medicare Automation Server:
-```bash
-npm run server
-# or
-node medicare-server.js
-```
-
-The server will run on port 3001 by default.
-
-### 2. Form Submission Server
-
-Navigate to the FormSubmission directory:
-```bash
-cd FormSubmission
-pip install -r requirements.txt
-```
-
-Start the Form Submission Server:
-```bash
-python form-server.py
-```
-
-The server will run on port 5000 by default.
-
-### 3. Google Sheets Configuration
-
-Update the Google Script with your server URLs:
-
-```javascript
-// 🌐 SERVER URLs - UPDATE THESE WITH YOUR ACTUAL SERVER URLs
-var medicareServerUrl = "http://localhost:3001"; // Medicare Automation Server
-var formServerUrl = "http://localhost:5000";     // Form Submission Server
-```
-
-If using ngrok or other tunneling services, update these URLs accordingly.
-
-## Server Details
-
-### Medicare Automation Server (Port 3001)
-
-**Endpoints:**
-- `GET /health` - Health check
-- `POST /process-medicare` - Process Medicare automation for a patient
-- `GET /queue-status` - Get current queue status
-
-**Features:**
-- Queue-based processing
-- Account creation automation
-- Doctor fetching automation
-- Direct sheet updates
-- Error handling and status reporting
-
-### Form Submission Server (Port 5000)
-
-**Endpoints:**
-- `GET /health` - Health check
-- `POST /submit-form` - Submit form data (new endpoint)
-- `POST /submit` - Legacy braces form endpoint
-- `POST /submit-cgm` - Legacy CGM form endpoint
-
-**Features:**
-- Supports both braces and CGM forms
-- JSON-based form submission
-- Backward compatibility with legacy endpoints
-
-## Usage
-
-### Starting Both Servers
-
-1. **Terminal 1 - Medicare Server:**
-```bash
-cd MedicareAutomation
-npm run server
-```
-
-2. **Terminal 2 - Form Server:**
-```bash
-cd FormSubmission
-python form-server.py
-```
-
-### Testing the System
-
-1. **Test Medicare Server:**
-```bash
-curl http://localhost:3001/health
-```
-
-2. **Test Form Server:**
-```bash
-curl http://localhost:5000/health
-```
-
-### Google Sheets Integration
-
-The system automatically triggers when:
-- Status column contains valid values (VERIFIED DR CHASE, etc.)
-- Quality Check column contains "PASSED"
-- Lead Status is not already "Submitted"
-
-## Environment Variables
-
-### Medicare Automation Server
-Create a `.env` file in the MedicareAutomation directory:
-```
-MEDICARE_PORT=3001
-GOOGLE_SHEET_ID=your_sheet_id
-HEADLESS=false
-SLOW_MO=1000
-```
-
-### Form Submission Server
-Create a `.env` file in the FormSubmission directory:
-```
-FORM_SERVER_PORT=5000
-```
-
-## Monitoring and Logs
-
-Both servers provide detailed console logging:
-- 🏥 Medicare automation progress
-- 📋 Queue status updates
-- 📝 Form submission results
-- ❌ Error messages and debugging info
-
-## Troubleshooting
-
-### Common Issues:
-
-1. **Medicare Server Not Starting:**
-   - Check if Chrome is installed
-   - Verify Google Sheets credentials
-   - Ensure port 3001 is available
-
-2. **Form Server Not Starting:**
-   - Verify Python dependencies installed
-   - Check if port 5000 is available
-   - Ensure Flask is properly installed
-
-3. **Google Sheets Connection Issues:**
-   - Verify Google credentials
-   - Check sheet permissions
-   - Ensure correct sheet ID in environment variables
-
-### Debug Mode:
-
-Enable debug mode by setting environment variables:
-```bash
-# Medicare Server
-HEADLESS=false
-SLOW_MO=2000
-
-# Form Server
-FLASK_DEBUG=true
-```
-
-## Benefits of Separation
-
-1. **Better Resource Management** - Each server handles its specific tasks
-2. **Improved Reliability** - If one server fails, the other continues working
-3. **Easier Debugging** - Isolated logs and error handling
-4. **Scalability** - Servers can be scaled independently
-5. **Maintenance** - Updates can be deployed to individual servers
-
-## Testing
-
-### Create Test Files
-
-You can create test files to verify functionality:
-
-```bash
-# Test Medicare server
-node test-medicare-server.js
-
-# Test Form server
-python test-form-server.py
-```
-
-**Note:** Test files will be automatically created and removed after testing as requested. 
-
 
