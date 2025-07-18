@@ -1,0 +1,22 @@
+{
+  "name": "chasing-submission-automation",
+  "version": "1.0.0",
+  "description": "Three-server automation system for Medicare, Doctor Fetching, and Form Submission",
+  "main": "orchestration-server.js",
+  "scripts": {
+    "start": "node orchestration-server.js",
+    "orchestration": "node orchestration-server.js",
+    "start-all": "start-all-servers.bat",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "axios": "^1.10.0",
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "node-fetch": "^2.7.0",
+    "dotenv": "^16.3.1"
+  },
+  "keywords": ["automation", "medicare", "forms", "nodejs"],
+  "author": "",
+  "license": "ISC"
+}

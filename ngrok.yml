@@ -1,0 +1,14 @@
+version: "2"
+# REPLACE THE LINE BELOW WITH YOUR ACTUAL NGROK AUTH TOKEN
+# Get it from: https://dashboard.ngrok.com/get-started/your-authtoken
+authtoken: 2wS08LziESqid7ezebo139kH7Vz_3Z5nEth6zj3io7Vkhs4P9
+
+tunnels:
+  orchestration:
+    addr: 3003
+    proto: http
+    name: "Orchestration Gateway Server"
+    inspect: true
+    schemes:
+      - https
+      - http 
